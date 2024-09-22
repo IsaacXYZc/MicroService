@@ -24,6 +24,7 @@ public class OrderService{
         return orderRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found"));
     }
+
     public OrderEntity placeOrder(OrderRequest orderRequest) {
         WebClient webClient = WebClient.create("http://localhost:8080/api");
         //validando que el usuario exista
