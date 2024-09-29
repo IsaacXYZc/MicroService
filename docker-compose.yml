@@ -1,15 +1,15 @@
 version: '3'
 services:
-  #Discovery service
+  # Discovery service
   discovery-service:
     build:
-      context: ./discovery-service  r
+      context: ./discovery-service
     ports:
       - "8761:8761"                 
     networks:
       - app-network                
          
-  #API Gateway
+  # API Gateway
   api-gateway:
     build:
       context: ./api-gateway         
