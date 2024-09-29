@@ -1,0 +1,113 @@
+version: '3'
+services:
+  #Discovery service
+  discovery-service:
+    build:
+      context: ./discovery-service  r
+    ports:
+      - "8761:8761"                 
+    networks:
+      - app-network                
+         
+  #API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway         
+    ports:
+      - "8080:8080"                 
+    networks:
+      - app-network                 
+    depends_on:
+      - discovery-service               
+      
+  # Microservicio de Usuarios
+  users:
+    build:
+      context: ./users      
+    networks:
+      - app-network                 
+    depends_on:
+      - discovery-service   
+      - users-db
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://users-db:3306/users_db
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=123456     
+      
+  # Base de datos de Usuarios
+  users-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: users_db
+    ports:
+      - "3306:3306"
+    networks:
+      - app-network
+    volumes:
+      - users-db-data:/var/lib/mysql        
+
+  # Microservicio de Productos
+  products:
+    build:
+      context: ./products
+    networks:
+      - app-network                 
+    depends_on:
+      - discovery-service  
+      - products-db
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://products-db:3306/products_db
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=123456   
+      
+  # Base de datos de Productos
+  products-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: products_db
+    ports:
+      - "3307:3306"
+    networks:
+      - app-network
+    volumes:
+      - products-db-data:/var/lib/mysql   
+      
+  # Microservicio de Ordenes
+  orders:
+    build:
+      context: ./orders
+    networks:
+      - app-network                 
+    depends_on:
+      - discovery-service  
+      - users
+      - products    
+      - orders-db
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://orders-db:3306/orders_db
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=123456   
+      
+  # Base de datos de Ordenes
+  orders-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: orders_db
+    ports:
+      - "3308:3306"
+    networks:
+      - app-network
+    volumes:
+      - orders-db-data:/var/lib/mysql   
+
+networks:
+  app-network:
+    driver: bridge                   
+    
+volumes:
+  users-db-data:
+  products-db-data:
+  orders-db-data:
