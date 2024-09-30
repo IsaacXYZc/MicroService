@@ -1,6 +1,6 @@
 version: '3'
 services:
-  # Discovery service
+  #Discovery service
   discovery-service:
     build:
       context: ./discovery-service
@@ -9,7 +9,7 @@ services:
     networks:
       - app-network                
          
-  # API Gateway
+  #API Gateway
   api-gateway:
     build:
       context: ./api-gateway         
