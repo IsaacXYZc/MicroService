@@ -1,81 +1,98 @@
 package com.micros.orders.services;
 
+import com.micros.orders.feign.ProductClient;
+import com.micros.orders.feign.UserClient;
 import com.micros.orders.models.*;
 import com.micros.orders.repositories.OrderRepository;
 import jakarta.persistence.EntityNotFoundException;
-import lombok.RequiredArgsConstructor;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.server.ResponseStatusException;
-import reactor.core.publisher.Mono;
+
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
-public class OrderService{
-    private final OrderRepository orderRepository;
+public class OrderService {
 
-    public OrderEntity getOrder(long id){
-        return orderRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order not found"));
+    private final OrderRepository orderRepository;
+    private final UserClient userClient;       // Cliente Feign para usuarios
+    private final ProductClient productClient; // Cliente Feign para productos
+
+    public OrderService(OrderRepository orderRepository, UserClient userClient, ProductClient productClient) {
+        this.orderRepository = orderRepository;
+        this.userClient = userClient;
+        this.productClient = productClient;
     }
 
-    public OrderEntity placeOrder(OrderRequest orderRequest) {
-        WebClient webClient = WebClient.create("http://localhost:8080/api");
-        //validando que el usuario exista
-        UserRequest userResult = webClient.get()
-                .uri(uriBuilder -> uriBuilder.path("/users/{id}").build(orderRequest.getUserId()))
-                .retrieve()
-                .onStatus(
-                        HttpStatusCode::is4xxClientError,
-                        response -> Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "No se encontró el usuario con ese id."))
-                )
-                .bodyToMono(UserRequest.class)
-                .block();
-        System.out.println("Usuario validado: "+ userResult.getUsername());
-        //validando que todos los productos esten en stock
-        BaseResponse baseResult = webClient.post()
-                .uri("/products/in-stock")
-                .body(Mono.just(orderRequest.getProducts()), List.class)
-                .retrieve()
-                .bodyToMono(BaseResponse.class).block();
-        System.out.println("Stock validado: "+ !baseResult.hasErrors());
-        if(baseResult==null || baseResult.hasErrors()){
-            throw new IllegalArgumentException("Algunos productos no estan en stock: "+baseResult);
+    public OrderResponse getOrder(long id) {
+        OrderEntity order = orderRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Orden con el ID " + id + " no encontrada"));
+        return convertToOrderResponse(order);
+    }
+
+    public OrderResponse  placeOrder(OrderRequest orderRequest) {
+
+        // Validar que los productos están en stock
+        BaseResponse baseResult = productClient.checkProductsInStock(orderRequest.getProducts());
+        System.out.println("Stock validado: " + !baseResult.hasErrors());
+        if (baseResult.hasErrors()) {
+            throw new IllegalArgumentException("Algunos productos no están en stock: " + baseResult);
         }
-        //Obteniendo los productos, con su id, nombre, precio, etc
-        List<ProductEntity> productsResult = webClient.post()
-                .uri("/products/in-stock/list")
-                .body(Mono.just(orderRequest.getProducts()), List.class)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<ProductEntity>>() {}).block();
-        System.out.println("Productos validados: "+ productsResult);
-        if(productsResult==null || productsResult.isEmpty()){
+
+        // Obtener detalles de los productos
+        List<ProductEntity> productsResult = productClient.getProductsInStock(orderRequest.getProducts());
+        System.out.println("Productos validados: " + productsResult);
+        if (productsResult == null || productsResult.isEmpty()) {
             throw new NullPointerException("No hay productos que añadir a la orden.");
         }
-        List<ProductEntity> productsToSave;
+
+        // Crear la orden y asociar los productos
         OrderEntity order = OrderEntity.builder()
                 .userId(orderRequest.getUserId())
                 .products(new ArrayList<>())
                 .build();
-        productsResult.forEach(
-                productResult ->{
-                    ProductEntity product = ProductEntity.builder()
-                        .name(productResult.getName())
-                        .price(productResult.getPrice())
-                        .quantity(productResult.getQuantity())
-                            .order(order)
-                        .build();
-                        order.getProducts().add(product);
-                }
-        );
-        return orderRepository.save(order);
+
+        productsResult.forEach(productResult -> {
+            ProductEntity product = ProductEntity.builder()
+                    .name(productResult.getName())
+                    .price(productResult.getPrice())
+                    .quantity(productResult.getQuantity())
+                    .order(order)
+                    .build();
+            order.getProducts().add(product);
+        });
+
+        return convertToOrderResponse(orderRepository.save(order));
     }
 
+    // Obtener todos los pedidos de un usuario
+    public List<OrderResponse> getOrdersByUserId(String userId) {
+        List<OrderEntity> orders = orderRepository.findByUserId(userId);
+        List<OrderResponse> orderResponses = new ArrayList<>();
+        orders.forEach(order -> orderResponses.add(convertToOrderResponse(order)));
+        return orderResponses;
+    }
+
+    // Cancelar un pedido
+    public void cancelOrder(long id, String userId) {
+        OrderEntity order = orderRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Order with ID " + id + " not found"));
+
+        if (!order.getUserId().equals(userId)) {
+            throw new AccessDeniedException("You do not have permission to cancel this order");
+        }
+
+        // Cancelar la orden (restaurar productos si es necesario)
+        orderRepository.delete(order);
+    }
+
+    private OrderResponse convertToOrderResponse(OrderEntity order) {
+        List<ProductResponse> productResponses = new ArrayList<>();
+        order.getProducts().forEach(product ->
+                productResponses.add(new ProductResponse(product.getId(), product.getName(), product.getPrice(), product.getQuantity()))
+        );
+        return new OrderResponse(order.getId(), order.getUserId(), productResponses);
+    }
 
 }

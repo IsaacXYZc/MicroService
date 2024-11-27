@@ -1,50 +1,76 @@
 package com.micros.users.services;
 
-import com.micros.users.models.UserEntity;
-import com.micros.users.models.UserRequest;
+import com.micros.users.exceptions.UserAlreadyExistsException;
+import com.micros.users.models.PasswordChangeRequest;
+import com.micros.users.models.UserRegisterRequest;
 import com.micros.users.models.UserResponse;
-import com.micros.users.repositories.UserRepository;
-import jakarta.ws.rs.NotFoundException;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import com.micros.users.models.UserUpdateRequest;
+import org.keycloak.admin.client.resource.UsersResource;
+import org.keycloak.representations.idm.CredentialRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.AccessDeniedException;
+import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class UserService {
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
 
-    public void register(UserRequest user) {
-        if(userRepository.findByUsername(user.getUsername()).isPresent()){
-            throw new IllegalArgumentException("Nombre de Usuario ya registrado");
-        }
-        userRepository.save(UserEntity.builder()
-                        .username(user.getUsername())
-                        .password(passwordEncoder.encode(user.getPassword()))
-                .build());
+    private final KeycloakService keycloakService;
+
+    public UserService(KeycloakService keycloakService) {
+        this.keycloakService = keycloakService;
     }
 
-    public UserResponse login(UserRequest user) throws AccessDeniedException {
-        UserEntity userEntity = userRepository.findByUsername(user.getUsername())
-                .orElseThrow(() -> new AccessDeniedException("Nombre de usuario inexistente"));
-        if(passwordEncoder.matches(user.getPassword(), userEntity.getPassword())) {
-            return UserResponse.builder()
-                    .id(userEntity.getId())
-                    .username(userEntity.getUsername())
-                    .build();
+
+    public String createUser(UserRegisterRequest userDto) {
+        try {
+            String userId = keycloakService.createUserInKeycloak(userDto);
+
+            keycloakService.assignRoleToUser(userId, "user");
+
+            return "User created successfully!";
+        } catch (UserAlreadyExistsException e) {
+            return "User already exists!";
+        } catch (Exception e) {
+            return "Error creating user, please contact the administrator.";
         }
-        throw new AccessDeniedException("Contraseña incorrecta");
+    }
+        ////////////////////////////////////////
+    public List<UserResponse> getAllUsers() {
+        return keycloakService.getAllUsers();
+    }
+    // Obtener un usuario por su ID
+    public UserResponse getUserById(String id) {
+        return keycloakService.getUserById(id);
     }
 
-    public UserResponse getUser(Long id) {
-        return UserResponse.builder()
-                .id(id)
-                .username(userRepository.findById(id)
-                        .orElseThrow(() -> new NotFoundException("Usuario con es id no existe."))
-                        .getUsername())
-                .build();
+    // Actualizar la información de un usuario
+    public void updateUser(String id, UserUpdateRequest userUpdateRequest) {
+        keycloakService.updateUserInKeycloak(id, userUpdateRequest);
+    }
+
+    // Eliminar un usuario por su ID
+    public void deleteUser(String id) {
+        keycloakService.deleteUserInKeycloak(id);
+    }
+
+    // Cambiar la contraseña de un usuario
+    public void changePassword(String id, PasswordChangeRequest password) {
+        keycloakService.changeUserPassword(id, password);
+    }
+
+
+    private String getPreferredUsername() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication instanceof JwtAuthenticationToken) {
+            Jwt jwt = ((JwtAuthenticationToken) authentication).getToken();
+            return jwt.getClaimAsString("preferred_username");
+        }
+        return null;
     }
 }

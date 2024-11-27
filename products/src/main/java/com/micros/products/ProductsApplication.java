@@ -25,18 +25,19 @@ public class ProductsApplication {
     CommandLineRunner init(ProductRepository productRepository) {
         return args -> {
 
-            //CREANDO AL USUARIO ADMIN
+            //CREANDO PRODUCTOS DE PRUEBA
+            /*
             productRepository.save(ProductEntity.builder()
-                    .description("Product Description")
-                    .name("Example Product")
-                    .price(19.99F)
+                    .description("Papa")
+                    .name("Papa por libra")
+                    .price(2000.99F)
                     .build());
             productRepository.save(ProductEntity.builder()
-                    .description("Product Description 2")
-                    .name("Example Product 2")
-                    .price(40.00F)
+                    .description("Yuca")
+                    .name("Yuca por libra")
+                    .price(1300.00F)
                     .build());
-            System.out.println("productos guardados.");
+            System.out.println("productos guardados."); */
         };
 
     }

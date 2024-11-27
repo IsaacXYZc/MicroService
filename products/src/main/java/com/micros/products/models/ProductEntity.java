@@ -1,10 +1,7 @@
 package com.micros.products.models;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 @Entity
 @Table(name="products")
@@ -12,13 +9,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Builder
 @Data
+@Getter
 public class ProductEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY )
     private Long id;
     @Column(nullable = false)
     private String name;
-    private String description;
+    private Long quantity;
     @Column(nullable = false)
     private Float price;
 
